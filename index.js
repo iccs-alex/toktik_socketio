@@ -1,21 +1,37 @@
 const express = require("express");
-const socket = require("socket.io");
-var cors = require('cors');
+const socketIO = require("socket.io");
+const http = require('http');
+const cors = require('cors');
+const session = require("express-session");
 
 const PORT = 3000;
 const app = express();
 app.use(cors())
 
-const server = app.listen(PORT, function () {
-    console.log(`Listening on port ${PORT}`);
-    console.log(`http://localhost:${PORT}`);
+const server = http.createServer(app)
+const io = socketIO(server, {
+    cors: {
+        origin: '*',
+    }
 });
 
+const sessionMiddleware = session({
+    secret: "my-secret",
+    resave: true,
+    saveUninitialized: true,
+});
 
-app.use(express.static("public"));
+app.use(sessionMiddleware);
+
+server.listen(PORT, function () {
+    console.log(`Listening on port ${PORT}`);
+});
+
+io.engine.use(sessionMiddleware);
+
+app.get("/", (req, res) => "This is Express");
 
 // Socket setup
-const io = socket(server);
 let activeUsers = [];
 let sessions = {};
 
@@ -73,10 +89,10 @@ io.on("connection", (socket) => {
 function addActiveUser() {
     for (let [id_, socket_] of io.of("/").sockets) {
         let skipUser = false;
-        for(let user_ of activeUsers) {
-            if(user_.userID === id_) skipUser = true;
+        for (let user_ of activeUsers) {
+            if (user_.userID === id_) skipUser = true;
         }
-        if(skipUser) continue;
+        if (skipUser) continue;
 
         activeUsers.push({
             userID: id_,
