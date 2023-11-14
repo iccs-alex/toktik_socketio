@@ -2,7 +2,7 @@ const express = require("express");
 const socketIO = require("socket.io");
 const http = require('http');
 const cors = require('cors');
-const session = require("express-session");
+const redis = require('redis');
 
 const PORT = 3000;
 const app = express();
@@ -15,88 +15,46 @@ const io = socketIO(server, {
     }
 });
 
-const sessionMiddleware = session({
-    secret: "my-secret",
-    resave: true,
-    saveUninitialized: true,
-});
+(async () => {
 
-app.use(sessionMiddleware);
+    // Connecting to Redis
+    const client = redis.createClient({ socket: { host: 'redis-msgbroker-service', port: 6379 } });
+    await client.connect();
+    
+    const subscriber = client.duplicate();
+    await subscriber.connect();
+    
+    await subscriber.subscribe('socketio', (json) => {
+        const message = JSON.parse(json)
+        console.log(message);
+        console.log(message['room'] + " " + message['viewCount']);
+        io.to(message['room']).emit('viewUpdate', message['viewCount']);
+    });
+
+})();
 
 server.listen(PORT, function () {
     console.log(`Listening on port ${PORT}`);
 });
 
-io.engine.use(sessionMiddleware);
 
-app.get("/", (req, res) => "This is Express");
-
-// Socket setup
-let activeUsers = [];
-let sessions = {};
-
-io.use((socket, next) => {
-    const sessionID = socket.handshake.auth.sessionID;
-    if (sessionID) {
-        // find existing session
-        const session = sessions[sessionID];
-        if (session) {
-            socket.sessionID = sessionID;
-            socket.userID = session.userID;
-            socket.username = session.username;
-            return next();
-        }
-    }
-    const username = socket.handshake.auth.username;
-    if (!username) {
-        return next(new Error("invalid username"));
-    }
-    // create new session
-    socket.sessionID = Math.random();
-    socket.userID = Math.random();
-    socket.username = username;
-    sessions[sessionID] = socket;
-    next();
-});
-
+// Handling new socketIO connections
 io.on("connection", (socket) => {
-    addActiveUser();
-    socket.emit("users", Array.from(activeUsers));
 
-    console.log("User connected: " + socket.id + " " + socket.username);
-    // notify existing users
-    socket.broadcast.emit("user connected", {
-        userID: socket.id,
-        username: socket.username,
-    });
+    console.log("Client connected");
 
     socket.on("disconnect", async () => {
-        const matchingSockets = await io.in(socket.userID).allSockets();
-        const isDisconnected = matchingSockets.size === 0;
-        if (isDisconnected) {
-            // notify other users
-            socket.broadcast.emit("user disconnected", socket.userID);
-            // update the connection status of the session
-            sessions[socket.sessionID] = {
-                userID: socket.userID,
-                username: socket.username,
-                connected: false,
-            };
-        }
+        console.log("Client disconnected");
     });
+
+    socket.on('joinRoom', (roomName) => {
+        console.log("Joined room " + roomName);
+        socket.join(roomName);
+    });
+
+    socket.on('leaveRoom', (roomName) => {
+        console.log("Left room " + roomName);
+        socket.leave(roomName);
+    });
+
 });
-
-function addActiveUser() {
-    for (let [id_, socket_] of io.of("/").sockets) {
-        let skipUser = false;
-        for (let user_ of activeUsers) {
-            if (user_.userID === id_) skipUser = true;
-        }
-        if (skipUser) continue;
-
-        activeUsers.push({
-            userID: id_,
-            username: socket_.username,
-        });
-    }
-}
