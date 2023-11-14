@@ -26,9 +26,13 @@ const io = socketIO(server, {
     
     await subscriber.subscribe('socketio', (json) => {
         const message = JSON.parse(json)
-        console.log(message);
-        console.log(message['room'] + " " + message['viewCount']);
-        io.to(message['room']).emit('viewUpdate', message['viewCount']);
+        console.log(message.action);
+        console.log(message['action']);
+        if(message['action'] === "viewUpdate") {
+            io.to(message['room']).emit('viewUpdate', message['viewCount']);
+        } else if(message.action === "likeUpdate") {
+            io.to(message['room']).emit('likeUpdate', message['likeCount']);
+        }
     });
 
 })();
