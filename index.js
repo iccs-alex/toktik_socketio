@@ -32,6 +32,10 @@ const io = socketIO(server, {
             io.to(message['room']).emit('viewUpdate', message['viewCount']);
         } else if(message.action === "likeUpdate") {
             io.to(message['room']).emit('likeUpdate', message['likeCount']);
+        } else if(message.action === "commentUpdate") {
+            io.to(message['room']).emit('commentUpdate');
+        } else if(message.action === "notifUpdate") {
+            io.to(message['room']).emit('notifUpdate');
         }
     });
 
