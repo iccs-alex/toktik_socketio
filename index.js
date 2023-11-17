@@ -3,6 +3,7 @@ const socketIO = require("socket.io");
 const http = require('http');
 const cors = require('cors');
 const redis = require('redis');
+const { log } = require("console");
 
 const PORT = 3000;
 const app = express();
@@ -20,26 +21,44 @@ const io = socketIO(server, {
     // Connecting to Redis
     const client = redis.createClient({ socket: { host: 'redis-msgbroker-service', port: 6379 } });
     await client.connect();
-    
+
     const subscriber = client.duplicate();
     await subscriber.connect();
-    
+
     await subscriber.subscribe('socketio', (json) => {
         const message = JSON.parse(json)
-        console.log(message.action);
-        console.log(message['action']);
-        if(message['action'] === "viewUpdate") {
-            io.to(message['room']).emit('viewUpdate', message['viewCount']);
-        } else if(message.action === "likeUpdate") {
-            io.to(message['room']).emit('likeUpdate', message['likeCount']);
-        } else if(message.action === "commentUpdate") {
-            io.to(message['room']).emit('commentUpdate');
-        } else if(message.action === "notifUpdate") {
-            io.to(message['room']).emit('notifUpdate');
+        if (message.action === "viewUpdate") {
+            emitToRooms(message)
+        } else if (message.action === "likeUpdate") {
+            emitToRooms(message)
+        } else if (message.action === "commentUpdate") {
+            emitToRooms(message)
+        } else if (message.action === "notifUpdate") {
+            emitToRooms(message)
         }
     });
 
 })();
+
+
+function emitToRooms(message) {
+    console.log(message.rooms);
+    console.log(message.rooms[1]);
+    for (const room of message.rooms[1]) {
+        console.log("emitting to room: " + room);
+        if ("data" in message) {
+            console.log(message.data);
+            io.to(room).emit(message.action, message.data);
+        } else {
+            io.to(room).emit(message.action);
+        }
+    }
+}
+
+
+
+
+
 
 server.listen(PORT, function () {
     console.log(`Listening on port ${PORT}`);
